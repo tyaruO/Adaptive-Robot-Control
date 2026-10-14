@@ -1,7 +1,60 @@
 # Adaptive-Robot-Control
-Adaptive-Control-Simulation
 
+Adaptive Robot Control は、環境の変化に応じてロボットの動作モードを自動で切り替える制御シミュレーションです。
 
+風速、障害物密度、センサ信頼度の3つの観測値をもとに、ロボットを安全かつ効率的に制御するための簡易な判定ロジックを実装しています。
+
+## 目的
+
+ロボットが環境条件に応じて適切な動作を選択できるようにするためのサンプルコードです。
+
+- 風が強い場合: 慎重モードへ変更
+- 障害物が多い場合: 慎重モードへ変更
+- センサの信頼度が低い場合: 停止モードへ変更
+- 条件が良好な場合: 通常運転モードへ変更
+
+## 動作モード
+
+このシミュレーションでは、次の3つのモードを定義しています。
+
+- `CRUISE`: 通常運転
+- `CAUTIOUS`: 注意が必要な状態
+- `STOP`: 安全のため一時停止
+
+## 主要要素
+
+### `EnvironmentTelemetry`
+環境センサから取得した入力データを表すデータクラスです。
+
+- `wind_speed`: 風速
+- `obstacle_density`: 障害物密度
+- `sensor_confidence`: センサの信頼度
+
+### `AdaptiveRobotController`
+環境データを評価して、適切なモードを決定する制御クラスです。
+
+主な機能:
+
+- `validate_telemetry()`: 入力値の妥当性を検証
+- `select_mode()`: 対応するモードを選択
+- `update()`: 判断結果を保存し、現在の状態を更新
+- `print_status()`: 判断結果を出力
+
+## 判定ロジック
+
+システムは以下の順序でモードを決定します。
+
+1. センサ信頼度が閾値未満の場合: `STOP`
+2. 風速が上限を超える場合: `CAUTIOUS`
+3. 障害物密度が上限を超える場合: `CAUTIOUS`
+4. 障害物密度が 0.6 以上の場合: `CAUTIOUS`
+5. それ以外: `CRUISE`
+
+## 実行例
+
+以下のコードを `adaptive_robot_controller.py` として保存して実行できます。
+
+```python
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
@@ -45,14 +98,10 @@ class AdaptiveRobotController:
             raise ValueError("max_wind_speed must be positive")
 
         if not 0 <= max_obstacle_density <= 1:
-            raise ValueError(
-                "max_obstacle_density must be between 0 and 1"
-            )
+            raise ValueError("max_obstacle_density must be between 0 and 1")
 
         if not 0 <= min_sensor_confidence <= 1:
-            raise ValueError(
-                "min_sensor_confidence must be between 0 and 1"
-            )
+            raise ValueError("min_sensor_confidence must be between 0 and 1")
 
         self.max_wind_speed = max_wind_speed
         self.max_obstacle_density = max_obstacle_density
@@ -108,40 +157,19 @@ class AdaptiveRobotController:
         if error is not None:
             return OperatingMode.STOP, f"Invalid telemetry: {error}"
 
-        if (
-            telemetry.sensor_confidence
-            < self.min_sensor_confidence
-        ):
-            return (
-                OperatingMode.STOP,
-                "Sensor confidence is below the safe threshold",
-            )
+        if telemetry.sensor_confidence < self.min_sensor_confidence:
+            return OperatingMode.STOP, "Sensor confidence is below the safe threshold"
 
         if telemetry.wind_speed > self.max_wind_speed:
-            return (
-                OperatingMode.CAUTIOUS,
-                "Wind speed exceeds the normal operating threshold",
-            )
+            return OperatingMode.CAUTIOUS, "Wind speed exceeds the normal operating threshold"
 
-        if (
-            telemetry.obstacle_density
-            > self.max_obstacle_density
-        ):
-            return (
-                OperatingMode.CAUTIOUS,
-                "Obstacle density exceeds the configured threshold",
-            )
+        if telemetry.obstacle_density > self.max_obstacle_density:
+            return OperatingMode.CAUTIOUS, "Obstacle density exceeds the configured threshold"
 
         if telemetry.obstacle_density >= 0.6:
-            return (
-                OperatingMode.CAUTIOUS,
-                "Many obstacles detected",
-            )
+            return OperatingMode.CAUTIOUS, "Many obstacles detected"
 
-        return (
-            OperatingMode.CRUISE,
-            "Environmental conditions are within configured limits",
-        )
+        return OperatingMode.CRUISE, "Environmental conditions are within configured limits"
 
     def update(
         self,
@@ -154,9 +182,7 @@ class AdaptiveRobotController:
         new_mode, reason = self.select_mode(telemetry)
         self.current_mode = new_mode
 
-        elapsed_ms = (
-            time.perf_counter() - start_time
-        ) * 1000.0
+        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
         record = DecisionRecord(
             mode=new_mode,
@@ -172,10 +198,7 @@ class AdaptiveRobotController:
 
         print(f"Mode: {record.mode.value}")
         print(f"Reason: {record.reason}")
-        print(
-            f"Processing time: "
-            f"{record.processing_time_ms:.4f} ms"
-        )
+        print(f"Processing time: {record.processing_time_ms:.4f} ms")
         print("-" * 50)
 
 
@@ -229,3 +252,45 @@ def run_demo() -> None:
 
 if __name__ == "__main__":
     run_demo()
+```
+
+## 実行方法
+
+Python 3.10 以上で実行できます。
+
+```bash
+python adaptive_robot_controller.py
+```
+
+## サンプル出力
+
+```text
+Test: Normal environment
+Mode: CRUISE
+Reason: Environmental conditions are within configured limits
+Processing time: 0.1234 ms
+--------------------------------------------------
+
+Test: Crowded environment
+Mode: CAUTIOUS
+Reason: Many obstacles detected
+Processing time: 0.0987 ms
+--------------------------------------------------
+```
+
+## まとめ
+
+このプロジェクトは、シンプルな条件分岐によってロボットの安全運転を模擬するサンプルとして扱いやすい構成になっています。
+
+今後の拡張としては、以下のような機能を追加できます。
+
+- モードごとの制御パラメータの詳細化
+- より自然な環境モデルの導入
+- ロボットの移動軌跡のシミュレーション
+- GUI や可視化の追加
+
+## ライセンス
+
+このリポジトリは、特別なライセンス表記がない場合は個人利用や学習用途を想定したサンプルコードとして扱ってください。
+
+必要に応じて、MIT License などを追加することも可能です。
